@@ -205,3 +205,27 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# --- Python LLM project additions ---
+# API Keys and Secrets (CRITICAL!)
+config/.env
+*.key
+api_keys.txt
+
+# Generated data files
+data/
+*.csv
+results/
+
+# IDE files
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+.virtualenv/
