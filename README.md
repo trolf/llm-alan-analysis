@@ -16,6 +16,6 @@ Hackathon 2026 - Analysis of how Alan is recommended by major LLMs
 ## Models Tested
 
 - OpenAI ChatGPT-4
-- Anthropic Claude
+- Perplexity
 - Google Gemini
 - Mistral Le Chat

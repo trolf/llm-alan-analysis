@@ -1,4 +1,5 @@
 import os
+import requests
 import json
 import time
 import csv
@@ -21,6 +22,9 @@ class LLMRunner:
         self.gemini_model = genai.GenerativeModel('gemini-2.5-flash')  # Updated to requested model
         
         self.mistral_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
+
+        # Perplexity doesn't need a special client, just requests
+        self.perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
 
     def _extract_openai_message_text(self, response):
         """Best-effort extraction of message text from OpenAI ChatCompletion response."""
@@ -49,7 +53,7 @@ class LLMRunner:
         """Ask OpenAI via Responses API with web search and citation extraction"""
         try:
             response = self.openai_client.responses.create(
-                model="gpt-5-mini",
+                model="gpt-5",
                 input=[
                     {"role": "system", "content": "You are a helpful assistant. Cite your sources when possible."},
                     {"role": "user", "content": prompt}
@@ -117,7 +121,7 @@ class LLMRunner:
                 message_content = "\n".join(lines)
 
             return {
-                "model": "gpt-5-mini",
+                "model": "gpt-5",
                 "prompt": prompt,
                 "response": message_content,
                 "run_number": run_number,
@@ -126,7 +130,7 @@ class LLMRunner:
                 "status": "success"
             }
         except Exception as e:
-            return {"model": "gpt-5-mini", "prompt": prompt, "error": str(e), "status": "error", "run_number": run_number}
+            return {"model": "gpt-5", "prompt": prompt, "error": str(e), "status": "error", "run_number": run_number}
     
     def ask_gemini(self, prompt, run_number):
         """Ask Google Gemini"""
@@ -144,6 +148,57 @@ class LLMRunner:
         except Exception as e:
             return {"model": "gemini-2.5-flash", "prompt": prompt, "error": str(e), "status": "error", "run_number": run_number}
     
+    def ask_perplexity(self, prompt, run_number):
+        """Ask Perplexity (web-connected search model)"""
+        try:
+            url = "https://api.perplexity.ai/chat/completions"
+            
+            headers = {
+                "Authorization": f"Bearer {self.perplexity_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "sonar",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            
+            if response.status_code == 200:
+                result = response.json()
+                answer = result['choices'][0]['message']['content']
+                
+                return {
+                    "model": "perplexity-sonar",
+                    "prompt": prompt,
+                    "response": answer,
+                    "run_number": run_number,
+                    "timestamp": datetime.now().isoformat(),
+                    "alan_mentioned": "alan" in answer.lower(),
+                    "web_connected": True,
+                    "status": "success"
+                }
+            else:
+                return {
+                    "model": "perplexity-sonar",
+                    "prompt": prompt,
+                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "status": "error",
+                    "run_number": run_number
+                }
+                
+        except Exception as e:
+            return {
+                "model": "perplexity-sonar",
+                "prompt": prompt,
+                "error": str(e),
+                "status": "error",
+                "run_number": run_number
+            }
+
     def ask_mistral(self, prompt, run_number):
         """Ask Mistral"""
         try:
@@ -182,6 +237,9 @@ class LLMRunner:
         results.append(self.ask_mistral(prompt, run_number))
         time.sleep(1)
         
+        results.append(self.ask_perplexity(prompt, run_number))
+        time.sleep(1)
+
         return results
     
     def run_all_tests(self, num_iterations=1):

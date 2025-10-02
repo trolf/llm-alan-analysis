@@ -14,7 +14,7 @@ def test_chatgpt():
     """Test Responses API call with citations extraction"""
     try:
         response = client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-5",
             input=[
                 {"role": "system", "content": "You are a helpful assistant. Cite your sources when possible."},
                 {"role": "user", "content": "What is the best health insurance for freelancers in France?"}
