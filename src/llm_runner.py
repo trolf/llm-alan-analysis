@@ -49,7 +49,7 @@ class LLMRunner:
         """Ask OpenAI via Responses API with web search and citation extraction"""
         try:
             response = self.openai_client.responses.create(
-                model="gpt-5-mini",
+                model="gpt-5",
                 input=[
                     {"role": "system", "content": "You are a helpful assistant. Cite your sources when possible."},
                     {"role": "user", "content": prompt}
@@ -117,7 +117,7 @@ class LLMRunner:
                 message_content = "\n".join(lines)
 
             return {
-                "model": "gpt-5-mini",
+                "model": "gpt-5",
                 "prompt": prompt,
                 "response": message_content,
                 "run_number": run_number,
@@ -126,7 +126,7 @@ class LLMRunner:
                 "status": "success"
             }
         except Exception as e:
-            return {"model": "gpt-5-mini", "prompt": prompt, "error": str(e), "status": "error", "run_number": run_number}
+            return {"model": "gpt-5", "prompt": prompt, "error": str(e), "status": "error", "run_number": run_number}
     
     def ask_gemini(self, prompt, run_number):
         """Ask Google Gemini"""
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         prompts = json.load(f)
     
     print(f"Running full test on {len(prompts)} prompts...")
-    results = runner.run_all_tests(num_iterations=1)
+    results = runner.run_all_tests(num_iterations=2)
     
     # Show a brief summary of results
     for result in results:
