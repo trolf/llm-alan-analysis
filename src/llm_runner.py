@@ -46,23 +46,83 @@ class LLMRunner:
         return str(response)
     
     def ask_openai(self, prompt, run_number):
-        """Ask OpenAI ChatGPT"""
+        """Ask OpenAI via Responses API with web search and citation extraction"""
         try:
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.responses.create(
                 model="gpt-5-mini",
-                messages=[{"role": "user", "content": prompt}],
-                # max_completion_tokens=500,
-                # temperature not supported for this model; defaults to 1
+                input=[
+                    {"role": "system", "content": "You are a helpful assistant. Cite your sources when possible."},
+                    {"role": "user", "content": prompt}
+                ],
+                tools=[
+                    {"type": "web_search"}
+                ],
+                # max_output_tokens=500,
             )
-            # Robust extraction: capture actual content regardless of SDK representation
-            message_content = self._extract_openai_message_text(response)
+
+            # Extract combined text answer
+            message_content = getattr(response, "output_text", None)
+            if not message_content:
+                fragments = []
+                try:
+                    for item in getattr(response, "output", []) or []:
+                        for content in getattr(item, "content", []) or []:
+                            if getattr(content, "type", None) == "output_text" and getattr(content, "text", None):
+                                value = getattr(content.text, "value", None) or getattr(content.text, "content", None)
+                                if value:
+                                    fragments.append(value)
+                except Exception:
+                    pass
+                message_content = "\n".join(fragments) if fragments else ""
+
+            # Collect citations from annotations if present
+            citations = []
+            try:
+                seen = set()
+                for item in getattr(response, "output", []) or []:
+                    for content in getattr(item, "content", []) or []:
+                        if getattr(content, "type", None) == "output_text" and getattr(content, "text", None):
+                            annotations = getattr(content.text, "annotations", None) or []
+                            for ann in annotations:
+                                ann_type = getattr(ann, "type", None)
+                                if ann_type == "web_citation":
+                                    url = getattr(ann, "url", None)
+                                    title = getattr(ann, "title", None)
+                                    key = (url, title)
+                                    if url and key not in seen:
+                                        citations.append({"type": "web", "url": url, "title": title})
+                                        seen.add(key)
+                                elif ann_type == "file_citation":
+                                    file_id = getattr(getattr(ann, "file_citation", None), "file_id", None)
+                                    quote = getattr(getattr(ann, "file_citation", None), "quote", None)
+                                    key = (file_id, quote)
+                                    if file_id and key not in seen:
+                                        citations.append({"type": "file", "file_id": file_id, "quote": quote})
+                                        seen.add(key)
+            except Exception:
+                pass
+
+            # Append citations as a Markdown table after the raw answer (schema unchanged)
+            if citations:
+                lines = [message_content, "", "Citations:", "", "| # | Type | Title/Quote | URL / File ID |", "|---:|------|-------------|----------------|"]
+                for idx, c in enumerate(citations, start=1):
+                    if c["type"] == "web":
+                        title_or_quote = c.get("title") or ""
+                        ref = c.get("url") or ""
+                        lines.append(f"| {idx} | web | {title_or_quote} | {ref} |")
+                    elif c["type"] == "file":
+                        title_or_quote = c.get("quote") or ""
+                        ref = c.get("file_id") or ""
+                        lines.append(f"| {idx} | file | {title_or_quote} | {ref} |")
+                message_content = "\n".join(lines)
+
             return {
                 "model": "gpt-5-mini",
                 "prompt": prompt,
                 "response": message_content,
                 "run_number": run_number,
                 "timestamp": datetime.now().isoformat(),
-                "alan_mentioned": "alan" in message_content.lower(),
+                "alan_mentioned": "alan" in (message_content or "").lower(),
                 "status": "success"
             }
         except Exception as e:
@@ -124,7 +184,7 @@ class LLMRunner:
         
         return results
     
-    def run_all_tests(self, num_iterations=3):
+    def run_all_tests(self, num_iterations=1):
         """Run all prompts against all LLMs multiple times"""
         # Load prompts
         with open('config/prompts.json', 'r') as f:
@@ -173,13 +233,14 @@ if __name__ == "__main__":
         prompts = json.load(f)
     
     print(f"Running full test on {len(prompts)} prompts...")
-    results = runner.run_all_tests(num_iterations=2)
+    results = runner.run_all_tests(num_iterations=1)
     
     # Show a brief summary of results
     for result in results:
         if result['status'] == 'success':
             print(f"\n{result['model']} | run {result['run_number']}: Alan mentioned = {result['alan_mentioned']}")
-            print(f"Response: {result['response'][:100]}...")
+            print("Response:")
+            print(result['response'])
         else:
             print(f"\n{result['model']} | run {result['run_number']}: ERROR - {result.get('error', 'Unknown error')}")
     
